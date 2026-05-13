@@ -467,7 +467,7 @@ tr:hover td{background:var(--gray-50)}
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ===== FIREBASE CONFIG =====
 const app = initializeApp({
@@ -481,6 +481,9 @@ const app = initializeApp({
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// 오프라인 캐시 활성화 (모바일 동기화 안정화)
+enableIndexedDbPersistence(db).catch(()=>{});
 
 // ===== STATE =====
 let currentUser = null;
@@ -606,10 +609,26 @@ async function saveCategories(){
 function subscribeProjects(){
   if(unsubProjects)unsubProjects();
   const q=collection(db,'users',currentUser.uid,'projects');
-  unsubProjects=onSnapshot(q,snap=>{
-    projects=snap.docs.map(d=>({id:d.id,...d.data()}));
-    refreshAll();
-  },err=>{console.error(err);showToast('데이터 로드 오류');});
+  let retryCount=0;
+  const subscribe=()=>{
+    unsubProjects=onSnapshot(q,
+      snap=>{
+        retryCount=0;
+        projects=snap.docs.map(d=>({id:d.id,...d.data()}));
+        refreshAll();
+      },
+      err=>{
+        console.error('Firestore error:',err);
+        if(retryCount<5){
+          retryCount++;
+          setTimeout(subscribe, 2000*retryCount);
+        }else{
+          showToast('⚠️ 동기화 오류. 새로고침 해주세요.');
+        }
+      }
+    );
+  };
+  subscribe();
 }
 async function saveProjectToDb(proj){
   await setDoc(doc(db,'users',currentUser.uid,'projects',proj.id),proj);
