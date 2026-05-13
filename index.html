@@ -779,7 +779,7 @@ function renderSettlement(){
 // ===== OVERDUE =====
 function renderOverdue(){
   const td=today();
-  const list=projects.filter(p=>p.endDate&&p.endDate<td&&p.status!=='완료'&&p.status!=='취소');
+  const list=projects.filter(p=>p.endDate&&p.endDate<=td&&(p.status==='진행중'||p.status==='예정'));
   const total=list.reduce((s,p)=>s+(p.netAmount||0),0);
   document.getElementById('overdue-total').textContent=fmt(total);
   document.getElementById('overdue-count').textContent=`총 ${list.length}건`;
